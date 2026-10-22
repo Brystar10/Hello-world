@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#172554">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Shift Calendar">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="apple-touch-icon" href="./icon-192.png">
+  <link rel="stylesheet" href="./styles.css">
+  <title>Shift Calendar</title>
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">YOUR PERSONAL SCHEDULE</p>
+      <h1>Shift Calendar</h1>
+    </div>
+    <button id="todayBtn" class="ghost-btn">Today</button>
+  </header>
+
+  <main>
+    <section class="summary-grid" aria-label="Schedule summary">
+      <article class="summary-card"><span class="summary-label">Scheduled shifts</span><strong id="monthShiftCount">0</strong><span class="summary-note">this month</span></article>
+      <article class="summary-card"><span class="summary-label">Scheduled hours</span><strong id="monthHours">0</strong><span class="summary-note">this month</span></article>
+    </section>
+
+    <section class="calendar-panel">
+      <div class="month-header">
+        <button id="prevMonth" class="icon-btn" aria-label="Previous month">‹</button>
+        <h2 id="monthTitle">October 2026</h2>
+        <button id="nextMonth" class="icon-btn" aria-label="Next month">›</button>
+      </div>
+      <div class="weekdays" aria-hidden="true">
+        <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+      </div>
+      <div id="calendarGrid" class="calendar-grid" aria-label="Monthly calendar"></div>
+      <div class="legend"><span class="legend-dot"></span> Work shift <span class="legend-hint">Tap a date to view or edit</span></div>
+    </section>
+
+    <section class="day-panel">
+      <div class="section-heading">
+        <div><p class="eyebrow">SELECTED DAY</p><h2 id="selectedDateTitle">Choose a date</h2></div>
+        <button id="addShiftBtn" class="primary-btn">＋ Add shift</button>
+      </div>
+      <div id="selectedDayContent" class="selected-day-content"></div>
+    </section>
+
+    <section class="tools-panel">
+      <p class="eyebrow">SAVE TIME</p>
+      <h2>Fill your schedule faster</h2>
+      <p class="muted">Generate shifts from a repeating weekly pattern or add one shift to several dates at once.</p>
+      <div class="tool-buttons">
+        <button id="recurringBtn" class="secondary-btn">↻ Generate recurring shifts</button>
+        <button id="bulkBtn" class="secondary-btn">▦ Add to multiple dates</button>
+      </div>
+    </section>
+
+    <section class="tools-panel settings-panel">
+      <p class="eyebrow">YOUR DEFAULTS</p>
+      <h2>Shift preferences</h2>
+      <div class="form-grid">
+        <label>Default start time<input id="defaultStart" type="time" value="07:00"></label>
+        <label>Default end time<input id="defaultEnd" type="time" value="17:00"></label>
+        <label>Shift label<input id="defaultLabel" type="text" maxlength="32" value="Work shift" placeholder="e.g. Fire Rescue"></label>
+      </div>
+      <button id="saveDefaultsBtn" class="secondary-btn full-width">Save preferences</button>
+      <p class="fine-print">Changes are saved on this device. For data safety, use Export backup occasionally.</p>
+    </section>
+
+    <section class="tools-panel backup-panel">
+      <h2>Data & backup</h2>
+      <p class="muted">Your schedule is stored locally in this browser on this device.</p>
+      <div class="tool-buttons">
+        <button id="exportBtn" class="secondary-btn">Export backup</button>
+        <label class="secondary-btn file-label">Import backup<input id="importInput" type="file" accept="application/json"></label>
+      </div>
+      <button id="clearBtn" class="danger-btn">Delete all shifts</button>
+    </section>
+  </main>
+
+  <nav class="bottom-nav" aria-label="Quick actions">
+    <button id="navCalendar" class="nav-item active"><span>▦</span>Calendar</button>
+    <button id="navAdd" class="nav-item"><span>＋</span>Add shift</button>
+    <button id="navRepeat" class="nav-item"><span>↻</span>Repeat</button>
+  </nav>
+
+  <dialog id="shiftDialog" class="app-dialog">
+    <form id="shiftForm" method="dialog">
+      <div class="dialog-heading"><div><p class="eyebrow" id="shiftDialogEyebrow">SHIFT DETAILS</p><h2 id="shiftDialogTitle">Add a shift</h2></div><button type="button" class="close-btn" data-close="shiftDialog" aria-label="Close">×</button></div>
+      <input type="hidden" id="shiftId">
+      <label>Date<input id="shiftDate" type="date" required></label>
+      <label>Shift label<input id="shiftLabel" type="text" maxlength="32" value="Work shift" required></label>
+      <div class="form-grid">
+        <label>Start time<input id="shiftStart" type="time" required></label>
+        <label>End time<input id="shiftEnd" type="time" required></label>
+      </div>
+      <label>Notes (optional)<textarea id="shiftNotes" rows="2" maxlength="200" placeholder="Station, assignment, reminders…"></textarea></label>
+      <p class="fine-print">Overnight shifts are supported. End time earlier than start time means the shift ends the next day.</p>
+      <div class="dialog-actions"><button type="button" id="deleteShiftBtn" class="danger-btn hidden">Delete shift</button><span class="spacer"></span><button type="button" class="secondary-btn" data-close="shiftDialog">Cancel</button><button type="submit" class="primary-btn">Save shift</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="recurringDialog" class="app-dialog">
+    <form id="recurringForm" method="dialog">
+      <div class="dialog-heading"><div><p class="eyebrow">AUTOMATE YOUR ROTATION</p><h2>Generate recurring shifts</h2></div><button type="button" class="close-btn" data-close="recurringDialog" aria-label="Close">×</button></div>
+      <p class="muted">Create shifts on selected weekdays. Your known working date, Monday Oct 26, 2026, is preselected as a helpful anchor.</p>
+      <label>Schedule starts on<input id="repeatStartDate" type="date" value="2026-10-26" required></label>
+      <label>Generate through<input id="repeatEndDate" type="date" required></label>
+      <div class="weekday-picker">
+        <span class="weekday-choice"><input type="checkbox" id="day0" value="0"><label for="day0">Sun</label></span>
+        <span class="weekday-choice"><input type="checkbox" id="day1" value="1" checked><label for="day1">Mon</label></span>
+        <span class="weekday-choice"><input type="checkbox" id="day2" value="2" checked><label for="day2">Tue</label></span>
+        <span class="weekday-choice"><input type="checkbox" id="day3" value="3" checked><label for="day3">Wed</label></span>
+        <span class="weekday-choice"><input type="checkbox" id="day4" value="4" checked><label for="day4">Thu</label></span>
+        <span class="weekday-choice"><input type="checkbox" id="day5" value="5"><label for="day5">Fri</label></span>
+        <span class="weekday-choice"><input type="checkbox" id="day6" value="6"><label for="day6">Sat</label></span>
+      </div>
+      <div class="form-grid">
+        <label>Start time<input id="repeatStartTime" type="time" value="07:00" required></label>
+        <label>End time<input id="repeatEndTime" type="time" value="17:00" required></label>
+      </div>
+      <label>Shift label<input id="repeatLabel" type="text" value="Work shift" maxlength="32" required></label>
+      <label class="check-row"><input id="repeatReplace" type="checkbox"> Replace existing shifts on matching dates</label>
+      <p class="fine-print">Only selected weekdays are generated. Existing shifts are skipped unless replacement is checked.</p>
+      <div class="dialog-actions"><span class="spacer"></span><button type="button" class="secondary-btn" data-close="recurringDialog">Cancel</button><button type="submit" class="primary-btn">Generate shifts</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="bulkDialog" class="app-dialog">
+    <form id="bulkForm" method="dialog">
+      <div class="dialog-heading"><div><p class="eyebrow">ADD MANY AT ONCE</p><h2>Add to multiple dates</h2></div><button type="button" class="close-btn" data-close="bulkDialog" aria-label="Close">×</button></div>
+      <label>Dates (one per line, YYYY-MM-DD)<textarea id="bulkDates" rows="5" placeholder="2026-10-26&#10;2026-10-28&#10;2026-10-30" required></textarea></label>
+      <p class="fine-print">Tip: copy and paste a list of dates. Duplicate or invalid dates are ignored.</p>
+      <div class="form-grid">
+        <label>Start time<input id="bulkStartTime" type="time" value="07:00" required></label>
+        <label>End time<input id="bulkEndTime" type="time" value="17:00" required></label>
+      </div>
+      <label>Shift label<input id="bulkLabel" type="text" value="Work shift" maxlength="32" required></label>
+      <label class="check-row"><input id="bulkReplace" type="checkbox"> Replace existing shifts on these dates</label>
+      <div class="dialog-actions"><span class="spacer"></span><button type="button" class="secondary-btn" data-close="bulkDialog">Cancel</button><button type="submit" class="primary-btn">Add shifts</button></div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="./app.js"></script>
+</body>
+</html>
