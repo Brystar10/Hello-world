@@ -8,7 +8,7 @@
   let selectedDates = new Set();
   let bulkFromCalendar = false;
   let toastTimer;
-  let state = { shifts: [], defaults: { start: "07:00", end: "17:00", label: "Work shift" } };
+  let state = { shifts: [], defaults: { start: "07:00", end: "17:00", label: "Work shift" }, paySettings: { fireRate: 23.09, hospitalRate: 21.25, firePayday: "2026-10-30", firePeriodStart: "2026-10-12", firePeriodEnd: "2026-10-25", hospitalPayday: "2026-11-05", hospitalPeriodStart: "", hospitalPeriodEnd: "" }, theme: "dark" };
 
   const pad = n => String(n).padStart(2, "0");
   const dateKey = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
@@ -36,11 +36,16 @@
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed.shifts)) state.shifts = parsed.shifts;
         if (parsed.defaults) state.defaults = {...state.defaults, ...parsed.defaults};
+        if (parsed.paySettings) state.paySettings = {...state.paySettings, ...parsed.paySettings};
+        if (parsed.theme) state.theme = parsed.theme;
+        state.shifts = state.shifts.map(s => ({...s, employer: s.employer || (/hospital/i.test(s.label || "") ? "hospital" : "fire")}));
       }
     } catch (e) { console.warn("Could not load saved schedule", e); }
     $("defaultStart").value = state.defaults.start;
     $("defaultEnd").value = state.defaults.end;
     $("defaultLabel").value = state.defaults.label;
+    for (const key of Object.keys(state.paySettings)) if ($(key)) $(key).value = state.paySettings[key];
+    applyTheme();
   }
   function persist() {
     try {
@@ -55,6 +60,13 @@
     const el = $("toast"); el.textContent = message; el.classList.add("show");
     clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove("show"), 2600);
   }
+  function applyTheme() {
+    document.documentElement.dataset.theme = state.theme || "dark";
+    $("themeBtn").textContent = state.theme === "light" ? "☾ Dark" : "☼ Light";
+    document.querySelector('meta[name="theme-color"]').content = state.theme === "light" ? "#f4f7fb" : "#090e18";
+  }
+  function money(value) { return Number.isFinite(value) ? value.toLocaleString(undefined,{style:"currency",currency:"USD"}) : "—"; }
+  function employerName(s) { return s.employer === "hospital" ? "Hospital" : "Fire Rescue"; }
   function shiftsOn(key) { return state.shifts.filter(s => s.date === key).sort((a,b) => a.start.localeCompare(b.start)); }
   function monthShifts() {
     const y = currentMonth.getFullYear(), m = currentMonth.getMonth();
@@ -72,7 +84,8 @@
       const b = document.createElement("button");
       b.type="button";
       b.className = "calendar-day" + (d.getMonth()!==month?" outside":"") + (key===selectedDate?" selected":"") + (key===todayKey?" today":"") + (shiftsOn(key).length?" has-shift":"") + (selectingDates && selectedDates.has(key)?" multi-selected":"");
-      b.innerHTML = `<span class="day-number">${d.getDate()}</span>`;
+      const dayShifts = shiftsOn(key);
+      b.innerHTML = `<span class="day-number">${d.getDate()}</span>${dayShifts.length ? `<span class="day-markers">${dayShifts.map(s=>`<i class="${s.employer === "hospital" ? "hospital-marker" : "fire-marker"}" title="${employerName(s)}"></i>`).join("")}</span>` : ""}`;
       b.setAttribute("aria-label", `${fmtDate(key)}${shiftsOn(key).length ? ", shift scheduled":""}`);
       b.addEventListener("click", () => {
         if (selectingDates) {
@@ -87,6 +100,10 @@
     const ms = monthShifts();
     $("monthShiftCount").textContent = ms.length;
     $("monthHours").textContent = ms.reduce((n,s)=>n+shiftHours(s),0).toLocaleString(undefined,{maximumFractionDigits:1});
+    for (const [employer,prefix] of [["fire","fire"],["hospital","hospital"]]) {
+      const list = ms.filter(s => (s.employer || "fire") === employer);
+      $(prefix+"MonthStats").textContent = `${list.length} shifts · ${list.reduce((n,s)=>n+shiftHours(s),0).toLocaleString(undefined,{maximumFractionDigits:1})} hrs`;
+    }
     $("selectDatesBtn").textContent = selectingDates ? "✓ Done selecting" : "☑ Select dates";
     $("addSelectedDatesBtn").textContent = `Add selected (${selectedDates.size})`;
     $("addSelectedDatesBtn").disabled = selectedDates.size===0;
@@ -100,10 +117,35 @@
       content.innerHTML = `<div class="empty-state">No shifts scheduled for this date.<br>Tap “Add shift” to put one on the calendar.</div>`;
       return;
     }
-    content.innerHTML = shifts.map(s => `<article class="shift-card"><span class="shift-accent"></span><div class="shift-main"><strong>${escapeHtml(s.label)}</strong><p>${fmtTime(s.start)} – ${fmtTime(s.end)}${endDescription(s) ? " · "+endDescription(s):""} · ${shiftHours(s)} hrs</p>${s.notes ? `<p>${escapeHtml(s.notes)}</p>`:""}</div><button class="edit-btn" data-edit="${escapeHtml(s.id)}">Edit</button></article>`).join("");
+    content.innerHTML = shifts.map(s => `<article class="shift-card"><span class="shift-accent ${s.employer === "hospital" ? "hospital-accent" : "fire-accent"}"></span><div class="shift-main"><strong>${escapeHtml(s.label)} <small class="employer-tag ${s.employer === "hospital" ? "hospital-tag" : "fire-tag"}">${employerName(s)}</small></strong><p>${fmtTime(s.start)} – ${fmtTime(s.end)}${endDescription(s) ? " · "+endDescription(s):""} · ${shiftHours(s)} hrs</p>${s.notes ? `<p>${escapeHtml(s.notes)}</p>`:""}</div><button class="edit-btn" data-edit="${escapeHtml(s.id)}">Edit</button></article>`).join("");
     content.querySelectorAll("[data-edit]").forEach(b => b.addEventListener("click",()=>openShiftDialog(b.dataset.edit)));
   }
-  function render() { renderCalendar(); renderSelectedDay(); }
+  function render() { renderCalendar(); renderSelectedDay(); renderOverview(); renderPaycheck(); }
+  function renderOverview() {
+    const now = new Date(); const today = dateKey(now);
+    const upcoming = state.shifts.filter(s => s.date >= today).sort((a,b)=>a.date.localeCompare(b.date)||a.start.localeCompare(b.start))[0];
+    if (!upcoming) { $("upcomingTitle").textContent = "You're all clear"; $("upcomingDetails").textContent = "No upcoming shifts scheduled"; $("upcomingCountdown").textContent = ""; return; }
+    $("upcomingTitle").textContent = upcoming.label || employerName(upcoming);
+    $("upcomingDetails").textContent = `${employerName(upcoming)} · ${fmtDate(upcoming.date)} · ${fmtTime(upcoming.start)}–${fmtTime(upcoming.end)}`;
+    const diff = Math.max(0, Math.ceil((fromKey(upcoming.date)-fromKey(today))/86400000));
+    $("upcomingCountdown").textContent = diff === 0 ? "Today" : diff === 1 ? "Tomorrow" : `In ${diff} days`;
+  }
+  function renderPaycheck() {
+    const p = state.paySettings;
+    const calc = (employer, rateKey, startKey, endKey) => {
+      if (!p[startKey] || !p[endKey] || p[endKey] < p[startKey]) return null;
+      const shifts = state.shifts.filter(s => (s.employer || "fire") === employer && s.date >= p[startKey] && s.date <= p[endKey]);
+      return shifts.reduce((sum,s)=>sum+shiftHours(s),0) * Math.max(0, Number(p[rateKey]) || 0);
+    };
+    const fire = calc("fire","fireRate","firePeriodStart","firePeriodEnd");
+    const hospital = calc("hospital","hospitalRate","hospitalPeriodStart","hospitalPeriodEnd");
+    $("fireGross").textContent = money(fire); $("hospitalGross").textContent = money(hospital);
+    $("firePayPeriod").textContent = p.firePeriodStart && p.firePeriodEnd ? `${fmtShortDate(p.firePeriodStart)}–${fmtShortDate(p.firePeriodEnd)}` : "Set pay-period dates";
+    $("hospitalPayPeriod").textContent = p.hospitalPeriodStart && p.hospitalPeriodEnd ? `${fmtShortDate(p.hospitalPeriodStart)}–${fmtShortDate(p.hospitalPeriodEnd)}` : "Set pay-period dates";
+    $("firePayday").textContent = p.firePayday ? `Payday ${fmtShortDate(p.firePayday)}` : "Payday not set";
+    $("hospitalPayday").textContent = p.hospitalPayday ? `Payday ${fmtShortDate(p.hospitalPayday)}` : "Payday not set";
+    $("combinedGross").textContent = fire !== null && hospital !== null ? money(fire+hospital) : "Set hospital pay period";
+  }
   function openDialog(id) { const d=$(id); if(typeof d.showModal==="function") d.showModal(); else d.setAttribute("open",""); }
   function closeDialog(id) { const d=$(id); if(typeof d.close==="function") d.close(); else d.removeAttribute("open"); }
   function openShiftDialog(id=null, date=selectedDate) {
@@ -116,11 +158,12 @@
     $("shiftStart").value = existing?.start || state.defaults.start;
     $("shiftEnd").value = existing?.end || state.defaults.end;
     $("shiftNotes").value = existing?.notes || "";
+    $("shiftEmployer").value = existing?.employer || "fire";
     $("deleteShiftBtn").classList.toggle("hidden", !existing);
     openDialog("shiftDialog");
   }
   function newId() { return (crypto.randomUUID ? crypto.randomUUID() : "s"+Date.now()+Math.random().toString(16).slice(2)); }
-  function makeShift(date,label,start,end,notes="") { return {id:newId(),date,label:label.trim()||"Work shift",start,end,notes:notes.trim()}; }
+  function makeShift(date,label,start,end,notes="",employer="fire") { return {id:newId(),date,label:label.trim()||"Work shift",start,end,notes:notes.trim(),employer}; }
   function validDateKey(key) { if(!/^\d{4}-\d{2}-\d{2}$/.test(key)) return false; const d=fromKey(key); return dateKey(d)===key; }
   function hasShift(key) { return state.shifts.some(s=>s.date===key); }
   function upsertShift(shift, replace=true) {
@@ -139,12 +182,12 @@
     $("repeatStartDate").value = selectedDate || knownAnchor;
     const end = new Date(fromKey(selectedDate)); end.setMonth(end.getMonth()+3);
     $("repeatEndDate").value = dateKey(end);
-    $("repeatStartTime").value=state.defaults.start; $("repeatEndTime").value=state.defaults.end; $("repeatLabel").value=state.defaults.label;
+    $("repeatStartTime").value=state.defaults.start; $("repeatEndTime").value=state.defaults.end; $("repeatLabel").value=state.defaults.label; $("repeatEmployer").value="fire";
     openDialog("recurringDialog");
   });
   function openBulkDialog(dates, fromCalendar=false) {
     bulkFromCalendar = fromCalendar;
-    $("bulkStartTime").value=state.defaults.start; $("bulkEndTime").value=state.defaults.end; $("bulkLabel").value=state.defaults.label;
+    $("bulkStartTime").value=state.defaults.start; $("bulkEndTime").value=state.defaults.end; $("bulkLabel").value=state.defaults.label; $("bulkEmployer").value="fire";
     $("bulkDates").value=dates.join("\n");
     $("bulkDatesLabel").classList.toggle("hidden", fromCalendar);
     $("bulkTip").classList.toggle("hidden", fromCalendar);
@@ -169,7 +212,7 @@
     e.preventDefault();
     const id=$("shiftId").value, date=$("shiftDate").value, label=$("shiftLabel").value.trim(), start=$("shiftStart").value, end=$("shiftEnd").value;
     if(!validDateKey(date)||!label||!start||!end){showToast("Please complete the date, label, and times.");return;}
-    const shift=makeShift(date,label,start,end,$("shiftNotes").value);
+    const shift=makeShift(date,label,start,end,$("shiftNotes").value,$("shiftEmployer").value);
     if(id) { shift.id=id; state.shifts=state.shifts.filter(s=>s.id!==id); }
     state.shifts.push(shift); persist(); selectedDate=date; currentMonth=new Date(fromKey(date).getFullYear(),fromKey(date).getMonth(),1); closeDialog("shiftDialog");render();showToast(id?"Shift updated":"Shift saved");
   });
@@ -184,13 +227,13 @@
     if(!validDateKey(startKey)||!validDateKey(endKey)||endKey<startKey){showToast("Choose a valid date range.");return;}
     if(!weekdays.length){showToast("Select at least one weekday.");return;}
     if((fromKey(endKey)-fromKey(startKey))/86400000>730){showToast("Please generate no more than two years at a time.");return;}
-    const replace=$("repeatReplace").checked,label=$("repeatLabel").value.trim()||"Work shift",start=$("repeatStartTime").value,end=$("repeatEndTime").value;
+    const replace=$("repeatReplace").checked,label=$("repeatLabel").value.trim()||"Work shift",start=$("repeatStartTime").value,end=$("repeatEndTime").value,employer=$("repeatEmployer").value;
     let added=0,skipped=0;
     for(let d=fromKey(startKey);dateKey(d)<=endKey;d.setDate(d.getDate()+1)){
       const key=dateKey(d); if(!weekdays.includes(d.getDay()))continue;
       if(hasShift(key)&&!replace){skipped++;continue;}
       state.shifts=state.shifts.filter(s=>s.date!==key);
-      state.shifts.push(makeShift(key,label,start,end));added++;
+      state.shifts.push(makeShift(key,label,start,end,"",employer));added++;
     }
     persist();closeDialog("recurringDialog");selectedDate=startKey;currentMonth=new Date(fromKey(startKey).getFullYear(),fromKey(startKey).getMonth(),1);render();
     showToast(`Generated ${added} shifts${skipped?`; skipped ${skipped} dates already containing shifts`:""}.`);
@@ -199,18 +242,27 @@
     e.preventDefault();
     const dates=[...new Set($("bulkDates").value.split(/[\s,;]+/).map(x=>x.trim()).filter(validDateKey))];
     if(!dates.length){showToast("Enter at least one valid date in YYYY-MM-DD format.");return;}
-    const label=$("bulkLabel").value.trim()||"Work shift",start=$("bulkStartTime").value,end=$("bulkEndTime").value,replace=$("bulkReplace").checked;
+    const label=$("bulkLabel").value.trim()||"Work shift",start=$("bulkStartTime").value,end=$("bulkEndTime").value,replace=$("bulkReplace").checked,employer=$("bulkEmployer").value;
     let added=0,skipped=0;
     for(const key of dates){
       if(hasShift(key)&&!replace){skipped++;continue;}
       state.shifts=state.shifts.filter(s=>s.date!==key);
-      state.shifts.push(makeShift(key,label,start,end));added++;
+      state.shifts.push(makeShift(key,label,start,end,"",employer));added++;
     }
     persist();closeDialog("bulkDialog");selectedDate=dates[0];currentMonth=new Date(fromKey(selectedDate).getFullYear(),fromKey(selectedDate).getMonth(),1);
     if (bulkFromCalendar) { selectedDates.clear(); selectingDates=false; }
     $("bulkDatesLabel").classList.remove("hidden"); $("bulkTip").classList.remove("hidden"); $("calendarSelectedSummary").classList.add("hidden"); bulkFromCalendar=false;
     render();
     showToast(`Added ${added} shifts${skipped?`; skipped ${skipped} existing dates`:""}.`);
+  });
+  $("themeBtn").addEventListener("click",()=>{state.theme=state.theme==="light"?"dark":"light";applyTheme();persist();});
+  $("savePaySettings").addEventListener("click",()=>{
+    const keys=["fireRate","hospitalRate","firePayday","firePeriodStart","firePeriodEnd","hospitalPayday","hospitalPeriodStart","hospitalPeriodEnd"];
+    for(const key of keys) state.paySettings[key] = $(key).value;
+    if(Number(state.paySettings.fireRate)<0||Number(state.paySettings.hospitalRate)<0){showToast("Hourly rates cannot be negative.");return;}
+    if(state.paySettings.firePeriodStart && state.paySettings.firePeriodEnd && state.paySettings.firePeriodEnd < state.paySettings.firePeriodStart){showToast("Fire Rescue pay-period end must be on or after the start.");return;}
+    if(state.paySettings.hospitalPeriodStart && state.paySettings.hospitalPeriodEnd && state.paySettings.hospitalPeriodEnd < state.paySettings.hospitalPeriodStart){showToast("Hospital pay-period end must be on or after the start.");return;}
+    persist();renderPaycheck();showToast("Pay settings saved");
   });
   $("saveDefaultsBtn").addEventListener("click",()=>{
     state.defaults={start:$("defaultStart").value||"07:00",end:$("defaultEnd").value||"17:00",label:$("defaultLabel").value.trim()||"Work shift"};
@@ -226,7 +278,7 @@
       const parsed=JSON.parse(await file.text());
       if(!Array.isArray(parsed.shifts)||!parsed.defaults)throw new Error("Invalid backup");
       if(!confirm(`Import ${parsed.shifts.length} shifts? This replaces the current schedule.`))return;
-      state={shifts:parsed.shifts,defaults:{...state.defaults,...parsed.defaults}};persist();load();render();showToast("Backup imported");
+      state={...state,shifts:parsed.shifts.map(s=>({...s,employer:s.employer||(/hospital/i.test(s.label||"")?"hospital":"fire")})),defaults:{...state.defaults,...parsed.defaults},paySettings:{...state.paySettings,...(parsed.paySettings||{})},theme:parsed.theme||state.theme};persist();load();render();showToast("Backup imported");
     }catch(err){showToast("That backup file could not be read.");}
     e.target.value="";
   });

@@ -18,13 +18,24 @@
       <p class="eyebrow">YOUR PERSONAL SCHEDULE</p>
       <h1>Shift Calendar</h1>
     </div>
-    <button id="todayBtn" class="ghost-btn">Today</button>
+    <div class="header-actions"><button id="themeBtn" class="ghost-btn" aria-label="Toggle color theme">☼ Light</button><button id="todayBtn" class="ghost-btn">Today</button></div>
   </header>
 
   <main>
     <section class="summary-grid" aria-label="Schedule summary">
       <article class="summary-card"><span class="summary-label">Scheduled shifts</span><strong id="monthShiftCount">0</strong><span class="summary-note">this month</span></article>
       <article class="summary-card"><span class="summary-label">Scheduled hours</span><strong id="monthHours">0</strong><span class="summary-note">this month</span></article>
+    </section>
+
+    <section class="overview-row">
+      <article class="upcoming-card">
+        <p class="eyebrow">UP NEXT</p><h2 id="upcomingTitle">Your next shift</h2>
+        <p id="upcomingDetails">No upcoming shifts found</p><span id="upcomingCountdown" class="upcoming-countdown"></span>
+      </article>
+      <article class="workplace-stats">
+        <p class="eyebrow">THIS MONTH</p><div class="work-stat"><span class="work-dot fire-dot"></span><span>Fire Rescue</span><strong id="fireMonthStats">0 shifts · 0 hrs</strong></div>
+        <div class="work-stat"><span class="work-dot hospital-dot"></span><span>Hospital</span><strong id="hospitalMonthStats">0 shifts · 0 hrs</strong></div>
+      </article>
     </section>
 
     <section class="calendar-panel">
@@ -63,6 +74,31 @@
       </div>
     </section>
 
+    <section class="tools-panel pay-panel" id="paycheckPanel">
+      <p class="eyebrow">PAYDAY PLANNER</p><h2>Gross paycheck estimator</h2>
+      <p class="muted">Estimates use scheduled shift hours and your configured pay periods. These are gross amounts before deductions and are not guaranteed paycheck totals.</p>
+      <div class="pay-estimates">
+        <article class="pay-estimate fire-pay"><span class="summary-label">Fire Rescue</span><strong id="fireGross">$0.00</strong><span id="firePayPeriod" class="summary-note">Pay period</span><span id="firePayday" class="summary-note">Next payday</span></article>
+        <article class="pay-estimate hospital-pay"><span class="summary-label">Hospital</span><strong id="hospitalGross">$0.00</strong><span id="hospitalPayPeriod" class="summary-note">Pay period</span><span id="hospitalPayday" class="summary-note">Next payday</span></article>
+      </div>
+      <div class="combined-pay"><span>Combined estimated gross</span><strong id="combinedGross">$0.00</strong></div>
+      <details class="pay-settings"><summary>Pay settings</summary>
+        <div class="pay-setting-group"><h3>Fire Rescue</h3><div class="form-grid">
+          <label>Hourly rate ($)<input id="fireRate" type="number" min="0" step="0.01" value="23.09"></label>
+          <label>Next payday<input id="firePaydayInput" type="date" value="2026-10-30"></label>
+          <label>Pay period begins<input id="firePeriodStart" type="date" value="2026-10-12"></label>
+          <label>Pay period ends<input id="firePeriodEnd" type="date" value="2026-10-25"></label>
+        </div></div>
+        <div class="pay-setting-group"><h3>Hospital</h3><div class="form-grid">
+          <label>Hourly rate ($)<input id="hospitalRate" type="number" min="0" step="0.01" value="21.25"></label>
+          <label>Next payday<input id="hospitalPaydayInput" type="date" value="2026-11-05"></label>
+          <label>Pay period begins<input id="hospitalPeriodStart" type="date"></label>
+          <label>Pay period ends<input id="hospitalPeriodEnd" type="date"></label>
+        </div><p class="fine-print">Enter the hospital pay-period dates when you have them. The hospital estimate stays unavailable until both dates are set.</p></div>
+        <button id="savePaySettings" class="secondary-btn full-width">Save pay settings</button>
+      </details>
+    </section>
+
     <section class="tools-panel settings-panel">
       <p class="eyebrow">YOUR DEFAULTS</p>
       <h2>Shift preferences</h2>
@@ -97,7 +133,7 @@
       <div class="dialog-heading"><div><p class="eyebrow" id="shiftDialogEyebrow">SHIFT DETAILS</p><h2 id="shiftDialogTitle">Add a shift</h2></div><button type="button" class="close-btn" data-close="shiftDialog" aria-label="Close">×</button></div>
       <input type="hidden" id="shiftId">
       <label>Date<input id="shiftDate" type="date" required></label>
-      <label>Shift label<input id="shiftLabel" type="text" maxlength="32" value="Work shift" required></label>
+      <label>Workplace<select id="shiftEmployer"><option value="fire">Fire Rescue</option><option value="hospital">Hospital</option></select></label>\n      <label>Shift label<input id="shiftLabel" type="text" maxlength="32" value="Work shift" required></label>
       <div class="form-grid">
         <label>Start time<input id="shiftStart" type="time" required></label>
         <label>End time<input id="shiftEnd" type="time" required></label>
@@ -127,7 +163,7 @@
         <label>Start time<input id="repeatStartTime" type="time" value="07:00" required></label>
         <label>End time<input id="repeatEndTime" type="time" value="17:00" required></label>
       </div>
-      <label>Shift label<input id="repeatLabel" type="text" value="Work shift" maxlength="32" required></label>
+      <label>Workplace<select id="repeatEmployer"><option value="fire">Fire Rescue</option><option value="hospital">Hospital</option></select></label>\n      <label>Shift label<input id="repeatLabel" type="text" value="Work shift" maxlength="32" required></label>
       <label class="check-row"><input id="repeatReplace" type="checkbox"> Replace existing shifts on matching dates</label>
       <p class="fine-print">Only selected weekdays are generated. Existing shifts are skipped unless replacement is checked.</p>
       <div class="dialog-actions"><span class="spacer"></span><button type="button" class="secondary-btn" data-close="recurringDialog">Cancel</button><button type="submit" class="primary-btn">Generate shifts</button></div>
@@ -144,7 +180,7 @@
         <label>Start time<input id="bulkStartTime" type="time" value="07:00" required></label>
         <label>End time<input id="bulkEndTime" type="time" value="17:00" required></label>
       </div>
-      <label>Shift label<input id="bulkLabel" type="text" value="Work shift" maxlength="32" required></label>
+      <label>Workplace<select id="bulkEmployer"><option value="fire">Fire Rescue</option><option value="hospital">Hospital</option></select></label>\n      <label>Shift label<input id="bulkLabel" type="text" value="Work shift" maxlength="32" required></label>
       <label class="check-row"><input id="bulkReplace" type="checkbox"> Replace existing shifts on these dates</label>
       <div class="dialog-actions"><span class="spacer"></span><button type="button" class="secondary-btn" data-close="bulkDialog">Cancel</button><button type="submit" class="primary-btn">Add shifts</button></div>
     </form>
