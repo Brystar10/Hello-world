@@ -37,7 +37,12 @@
         <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
       </div>
       <div id="calendarGrid" class="calendar-grid" aria-label="Monthly calendar"></div>
-      <div class="legend"><span class="legend-dot"></span> Work shift <span class="legend-hint">Tap a date to view or edit</span></div>
+      <div class="calendar-select-actions">
+        <button id="selectDatesBtn" class="secondary-btn">☑ Select dates</button>
+        <button id="addSelectedDatesBtn" class="primary-btn" disabled>Add selected (0)</button>
+      </div>
+      <p id="selectionHint" class="selection-hint hidden">Tap each day you work. You can move between months; your selections will stay selected.</p>
+      <div class="legend"><span class="legend-dot"></span> Work shift <span class="legend-hint" id="calendarHint">Tap a date to view or edit</span></div>
     </section>
 
     <section class="day-panel">
@@ -132,8 +137,9 @@
   <dialog id="bulkDialog" class="app-dialog">
     <form id="bulkForm" method="dialog">
       <div class="dialog-heading"><div><p class="eyebrow">ADD MANY AT ONCE</p><h2>Add to multiple dates</h2></div><button type="button" class="close-btn" data-close="bulkDialog" aria-label="Close">×</button></div>
-      <label>Dates (one per line, YYYY-MM-DD)<textarea id="bulkDates" rows="5" placeholder="2026-10-26&#10;2026-10-28&#10;2026-10-30" required></textarea></label>
-      <p class="fine-print">Tip: copy and paste a list of dates. Duplicate or invalid dates are ignored.</p>
+      <label id="bulkDatesLabel">Dates (one per line, YYYY-MM-DD)<textarea id="bulkDates" rows="5" placeholder="2026-10-26&#10;2026-10-28&#10;2026-10-30" required></textarea></label>
+      <p id="bulkTip" class="fine-print">Tip: copy and paste a list of dates. Duplicate or invalid dates are ignored.</p>
+      <p id="calendarSelectedSummary" class="selection-summary hidden"></p>
       <div class="form-grid">
         <label>Start time<input id="bulkStartTime" type="time" value="07:00" required></label>
         <label>End time<input id="bulkEndTime" type="time" value="17:00" required></label>
@@ -146,5 +152,3 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <script src="./app.js"></script>
-</body>
-</html>
