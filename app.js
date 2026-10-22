@@ -4,6 +4,9 @@
   const knownAnchor = "2026-10-26";
   let currentMonth = new Date(2026, 9, 1);
   let selectedDate = knownAnchor;
+  let selectingDates = false;
+  let selectedDates = new Set();
+  let bulkFromCalendar = false;
   let toastTimer;
   let state = { shifts: [], defaults: { start: "07:00", end: "17:00", label: "Work shift" } };
 
@@ -68,15 +71,27 @@
       const d = new Date(year,month,1-startOffset+i), key = dateKey(d);
       const b = document.createElement("button");
       b.type="button";
-      b.className = "calendar-day" + (d.getMonth()!==month?" outside":"") + (key===selectedDate?" selected":"") + (key===todayKey?" today":"") + (shiftsOn(key).length?" has-shift":"");
+      b.className = "calendar-day" + (d.getMonth()!==month?" outside":"") + (key===selectedDate?" selected":"") + (key===todayKey?" today":"") + (shiftsOn(key).length?" has-shift":"") + (selectingDates && selectedDates.has(key)?" multi-selected":"");
       b.innerHTML = `<span class="day-number">${d.getDate()}</span>`;
       b.setAttribute("aria-label", `${fmtDate(key)}${shiftsOn(key).length ? ", shift scheduled":""}`);
-      b.addEventListener("click", () => { selectedDate=key; if(d.getMonth()!==currentMonth.getMonth()) currentMonth=new Date(d.getFullYear(),d.getMonth(),1); render(); });
+      b.addEventListener("click", () => {
+        if (selectingDates) {
+          if (selectedDates.has(key)) selectedDates.delete(key); else selectedDates.add(key);
+          if (d.getMonth()!==currentMonth.getMonth()) currentMonth=new Date(d.getFullYear(),d.getMonth(),1);
+          render(); return;
+        }
+        selectedDate=key; if(d.getMonth()!==currentMonth.getMonth()) currentMonth=new Date(d.getFullYear(),d.getMonth(),1); render();
+      });
       grid.appendChild(b);
     }
     const ms = monthShifts();
     $("monthShiftCount").textContent = ms.length;
     $("monthHours").textContent = ms.reduce((n,s)=>n+shiftHours(s),0).toLocaleString(undefined,{maximumFractionDigits:1});
+    $("selectDatesBtn").textContent = selectingDates ? "✓ Done selecting" : "☑ Select dates";
+    $("addSelectedDatesBtn").textContent = `Add selected (${selectedDates.size})`;
+    $("addSelectedDatesBtn").disabled = selectedDates.size===0;
+    $("selectionHint").classList.toggle("hidden", !selectingDates);
+    $("calendarHint").textContent = selectingDates ? "Tap dates to select or deselect" : "Tap a date to view or edit";
   }
   function renderSelectedDay() {
     $("selectedDateTitle").textContent = fmtDate(selectedDate);
@@ -127,10 +142,25 @@
     $("repeatStartTime").value=state.defaults.start; $("repeatEndTime").value=state.defaults.end; $("repeatLabel").value=state.defaults.label;
     openDialog("recurringDialog");
   });
-  $("bulkBtn").addEventListener("click",()=>{
+  function openBulkDialog(dates, fromCalendar=false) {
+    bulkFromCalendar = fromCalendar;
     $("bulkStartTime").value=state.defaults.start; $("bulkEndTime").value=state.defaults.end; $("bulkLabel").value=state.defaults.label;
-    $("bulkDates").value=selectedDate;
+    $("bulkDates").value=dates.join("\n");
+    $("bulkDatesLabel").classList.toggle("hidden", fromCalendar);
+    $("bulkTip").classList.toggle("hidden", fromCalendar);
+    $("calendarSelectedSummary").classList.toggle("hidden", !fromCalendar);
+    $("calendarSelectedSummary").textContent = fromCalendar ? `${dates.length} date${dates.length===1?"":"s"} selected: ${dates.slice().sort().map(fmtShortDate).join(", ")}` : "";
     openDialog("bulkDialog");
+  }
+  $("bulkBtn").addEventListener("click",()=>openBulkDialog([selectedDate]));
+  $("selectDatesBtn").addEventListener("click",()=>{
+    selectingDates = !selectingDates;
+    if (!selectingDates && selectedDates.size===0) showToast("No dates selected");
+    renderCalendar();
+  });
+  $("addSelectedDatesBtn").addEventListener("click",()=>{
+    if (!selectedDates.size) return;
+    openBulkDialog([...selectedDates].sort(), true);
   });
   document.querySelectorAll("[data-close]").forEach(b=>b.addEventListener("click",()=>closeDialog(b.dataset.close)));
   document.querySelectorAll("dialog").forEach(d=>d.addEventListener("click",e=>{if(e.target===d)closeDialog(d.id);}));
@@ -176,7 +206,10 @@
       state.shifts=state.shifts.filter(s=>s.date!==key);
       state.shifts.push(makeShift(key,label,start,end));added++;
     }
-    persist();closeDialog("bulkDialog");selectedDate=dates[0];currentMonth=new Date(fromKey(selectedDate).getFullYear(),fromKey(selectedDate).getMonth(),1);render();
+    persist();closeDialog("bulkDialog");selectedDate=dates[0];currentMonth=new Date(fromKey(selectedDate).getFullYear(),fromKey(selectedDate).getMonth(),1);
+    if (bulkFromCalendar) { selectedDates.clear(); selectingDates=false; }
+    $("bulkDatesLabel").classList.remove("hidden"); $("bulkTip").classList.remove("hidden"); $("calendarSelectedSummary").classList.add("hidden"); bulkFromCalendar=false;
+    render();
     showToast(`Added ${added} shifts${skipped?`; skipped ${skipped} existing dates`:""}.`);
   });
   $("saveDefaultsBtn").addEventListener("click",()=>{
