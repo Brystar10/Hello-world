@@ -121,14 +121,46 @@
     content.querySelectorAll("[data-edit]").forEach(b => b.addEventListener("click",()=>openShiftDialog(b.dataset.edit)));
   }
   function render() { renderCalendar(); renderSelectedDay(); renderOverview(); renderPaycheck(); }
+  function shiftDateTime(shift, time, isEnd=false) {
+    const date = fromKey(shift.date);
+    const minutes = parseTime(time);
+    date.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
+    if (isEnd && parseTime(shift.end) <= parseTime(shift.start)) date.setDate(date.getDate() + 1);
+    return date;
+  }
   function renderOverview() {
-    const now = new Date(); const today = dateKey(now);
-    const upcoming = state.shifts.filter(s => s.date >= today).sort((a,b)=>a.date.localeCompare(b.date)||a.start.localeCompare(b.start))[0];
-    if (!upcoming) { $("upcomingTitle").textContent = "You're all clear"; $("upcomingDetails").textContent = "No upcoming shifts scheduled"; $("upcomingCountdown").textContent = ""; return; }
-    $("upcomingTitle").textContent = upcoming.label || employerName(upcoming);
-    $("upcomingDetails").textContent = `${employerName(upcoming)} · ${fmtDate(upcoming.date)} · ${fmtTime(upcoming.start)}–${fmtTime(upcoming.end)}`;
-    const diff = Math.max(0, Math.ceil((fromKey(upcoming.date)-fromKey(today))/86400000));
-    $("upcomingCountdown").textContent = diff === 0 ? "Today" : diff === 1 ? "Tomorrow" : `In ${diff} days`;
+    const now = new Date();
+    const timedShifts = state.shifts.map(shift => ({
+      shift,
+      startsAt: shiftDateTime(shift, shift.start),
+      endsAt: shiftDateTime(shift, shift.end, true)
+    })).sort((a,b) => a.startsAt - b.startsAt);
+    // If a shift is in progress, identify it as such until its entered end time.
+    // Once it ends, the card advances to the next shift that has not started yet.
+    const active = timedShifts.find(item => item.startsAt <= now && item.endsAt > now);
+    const upcoming = active || timedShifts.find(item => item.startsAt > now);
+    if (!upcoming) {
+      $("upcomingTitle").textContent = "You're all clear";
+      $("upcomingDetails").textContent = "No upcoming shifts scheduled";
+      $("upcomingCountdown").textContent = "";
+      return;
+    }
+    const shift = upcoming.shift;
+    $("upcomingTitle").textContent = active ? `On shift now · ${shift.label || employerName(shift)}` : (shift.label || employerName(shift));
+    $("upcomingDetails").textContent = `${employerName(shift)} · ${fmtDate(shift.date)} · ${fmtTime(shift.start)}–${fmtTime(shift.end)}${endDescription(shift) ? " · next day" : ""}`;
+    if (active) {
+      $("upcomingCountdown").textContent = `In progress · ends ${upcoming.endsAt.toLocaleTimeString([], {hour:"numeric", minute:"2-digit"})}`;
+    } else {
+      const diff = Math.max(0, Math.ceil((upcoming.startsAt - now) / 86400000));
+      if (diff === 0) {
+        const mins = Math.max(0, Math.ceil((upcoming.startsAt - now) / 60000));
+        $("upcomingCountdown").textContent = mins < 60 ? `Starts in ${mins} min` : `Starts in ${Math.floor(mins/60)}h ${mins%60}m`;
+      } else if (diff === 1) {
+        $("upcomingCountdown").textContent = `Tomorrow · ${upcoming.startsAt.toLocaleTimeString([], {hour:"numeric", minute:"2-digit"})}`;
+      } else {
+        $("upcomingCountdown").textContent = `In ${diff} days · ${upcoming.startsAt.toLocaleTimeString([], {hour:"numeric", minute:"2-digit"})}`;
+      }
+    }
   }
   function renderPaycheck() {
     const p = state.paySettings;
@@ -293,4 +325,9 @@
   const defaultEnd = new Date(2026,9,26); defaultEnd.setMonth(defaultEnd.getMonth()+3);
   $("repeatEndDate").value=dateKey(defaultEnd);
   render();
+  // Keep the Up Next card aligned with the clock even when the page stays open.
+  window.setInterval(renderOverview, 60 * 1000);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) renderOverview();
+  });
 })();
